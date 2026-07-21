@@ -170,7 +170,7 @@ def _dialogue_add_vuzs(folders: Iterable[Path]):
     return True
 
 
-def _dialogue_add_index(folder: Path):
+def _dialogue_add_index(folder: Path) -> bool:
     print(f"В директории {folder} отсутствует необходимый файл 'index.json'")
     if not _get_accept("Хотите заполнить индекс программ?"):
         return False
@@ -198,3 +198,4 @@ def _dialogue_add_index(folder: Path):
         json.dump(programs, f_index, indent=2, ensure_ascii=False)
 
     print(f"Файл {folder / 'index.json'} успешно создан.")
+    return True
