@@ -4,7 +4,7 @@
 # Licensed under the MIT License. See LICENSE file for license text.
 # Распространяется под лицензией MIT. Полный текст лицензии см. в файле LICENSE.
 
-# Если коротко, делайте с этим кодом что угодно (продавайте, меняйте, улучшайте), 
+# Если коротко, делайте с этим кодом что угодно (продавайте, меняйте, улучшайте),
 # но оставляйте оригинальный файл лицензии и заголовок копирайта.
 
 
@@ -57,7 +57,15 @@ def _read_tables(vuz: Vuz):
                     # поэтому добавляем им нули чтобы не падал скрипт
                     exams += [0, 0, 0]
                     exams = exams[0], exams[1], exams[2]
-                status = Status(status)
+
+                try:
+                    status = Status(status)
+                except ValueError:
+                    print(
+                        f"Неучтенный статус: '{status}'. Оставьте сообщение об этой ошибке: https://github.com/NiyazBiyaz/vuz-gosuslugi-analyzer/issues"
+                    )
+                    status = Status.STATUS_UNKNOWN
+
                 portfolio = int(portfolio)
                 id = int(id)
                 date = parse_date(date)

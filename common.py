@@ -41,6 +41,7 @@ class Status(Enum):
     STATUS_PENDING_EXAMS = "Ожидаются результаты испытаний"
     STATUS_DROPPED = "Конкурсная группа исключена"
     STATUS_DROPPED_BY_VUZ = "Вуз отклонил выбор конкурсной группы"
+    STATUS_UNKNOWN = "Неучтенный статус"
 
 
 @dataclass
