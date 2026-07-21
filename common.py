@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
+from typing import TypedDict
 
 
 def normalize_program_name(name: str | Path) -> str:
@@ -55,6 +56,29 @@ class StudentInfo:
     statuses: dict[str, Status]
     date_added: datetime
 
+    def sort_score(self):
+        exams_score = (
+            self.total_score
+            if isinstance(self.exam_scores, str)
+            else sum(self.exam_scores)
+        )
+        bvi = 1000 if isinstance(self.exam_scores, str) else 0
+        port = self.portfolio_score if bvi == 0 else 0
+
+        return exams_score + bvi + port
+
+    def sort_score_str(self):
+        score = self.sort_score()
+        return score if score < 1000 else "БВИ"
+
+    def get_priority_of_program(self, program: ProgramInfo):
+        for prior, prog in self.priorities.items():
+            if prog == program:
+                return prior
+        raise ValueError(
+            f"Program '{program.name}' is not selected for student with code {self.id}."
+        )
+
 
 def parse_date(date: str) -> datetime:
     date, _, time = date.split()
@@ -69,3 +93,17 @@ class Vuz:
     name: str
     data_folder: Path | str
     programs: list[ProgramInfo] = field(default_factory=list)
+
+    @property
+    def path_folder(self):
+        if isinstance(self.data_folder, str):
+            return Path(self.data_folder)
+        return self.data_folder
+
+    def to_indexable(self) -> IndexableVuz:
+        return {"name": self.name, "folder": str(self.data_folder)}
+
+
+class IndexableVuz(TypedDict):
+    name: str
+    folder: str

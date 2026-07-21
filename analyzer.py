@@ -29,7 +29,7 @@ def main(vuz: Vuz, keep_ids: set[int]):
     print(f"Обрабатывается: {vuz.name} ({vuz.data_folder})")
     students = _read_tables(vuz)
     sorted_list = _sorted_by_priority(list(students.values()), vuz.programs, keep_ids)
-    write_lists(vuz, sorted_list)
+    _write_lists(vuz, sorted_list)
 
 
 def _read_tables(vuz: Vuz):
@@ -92,14 +92,19 @@ def _read_tables(vuz: Vuz):
     return students
 
 
-def write_lists(vuz: Vuz, sorted_list: list[tuple[StudentInfo, ProgramInfo | None]]):
+def _write_lists(vuz: Vuz, sorted_list: list[tuple[StudentInfo, ProgramInfo | None]]):
     pathname = f"{vuz.name}-списки.csv"
     with open(pathname, "w") as f:
-        f.write("Идентификатор,Название программы,Подано согласие\n")
+        f.write(
+            "Идентификатор,Балл по сортировке,Подано согласие,Приоритет программы,Название программы\n"
+        )
 
         for stud, program in sorted_list:
-            name = program.name if program is not None else "Не проходит"
-            f.write(f"{stud.id},{name},{stud.accept}\n")
+            pr_name = program.name if program is not None else "Не проходит"
+            priority = stud.get_priority_of_program(program) if program else 0
+            f.write(
+                f"{stud.id},{stud.sort_score_str()},{stud.accept},{priority},{pr_name}\n"
+            )
     print(f"Файл {pathname} создан успешно.")
 
 
@@ -114,7 +119,7 @@ def _sorted_by_priority(
     final_list: list[tuple[StudentInfo, ProgramInfo | None]] = []
     cannot_list: list[StudentInfo] = []
 
-    students.sort(key=_student_score, reverse=True)
+    students.sort(key=StudentInfo.sort_score, reverse=True)
 
     for student in students:
         for pr_name in counts:
@@ -142,18 +147,6 @@ def _sorted_by_priority(
     final_list += [(student, None) for student in cannot_list if student.accept]
 
     return final_list
-
-
-def _student_score(student: StudentInfo):
-    exams_score = (
-        student.total_score
-        if isinstance(student.exam_scores, str)
-        else sum(student.exam_scores)
-    )
-    bvi = 1000 if isinstance(student.exam_scores, str) else 0
-    port = student.portfolio_score if bvi == 0 else 0
-
-    return exams_score + bvi + port
 
 
 if __name__ == "__main__":

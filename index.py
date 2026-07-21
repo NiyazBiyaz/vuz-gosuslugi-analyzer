@@ -23,21 +23,22 @@ def locate_files() -> list[Vuz]:
 
 
 def _read_vuzs() -> list[Vuz]:
+    folders = list(_scan_folders())
+    vuzs: list[Vuz] | None = None
     if not VUZS_PATH.exists():
         print(f"Файл {VUZS_PATH} не найден...")
-        folders = list(_scan_folders())
 
         if len(folders) == 0:
             print("Нечего делать.")
             return []
 
-        is_file_created = _dialogue_add_vuzs(folders)
+        vuzs = _dialogue_add_vuzs(folders)
 
-        if not is_file_created:
+        if not vuzs:
             print("Нечего делать.")
             return []
 
-    vuzs: list[Vuz] = []
+    vuzs = []
 
     with open(VUZS_PATH) as f_vuzs:
         vuzs_json = json.load(f_vuzs)
@@ -64,6 +65,26 @@ def _read_vuzs() -> list[Vuz]:
             vuz = Vuz(vuz["name"], vuz["folder"], [])
             vuzs.append(vuz)
 
+    registered_folders = [v.path_folder.resolve() for v in vuzs]
+    same_length = len(registered_folders) == len(folders)
+    different_content = not same_length or any(
+        registered.resolve() != existing.resolve()
+        for registered in registered_folders
+        for existing in folders
+    )
+    if different_content:
+        for v in vuzs:
+            if not v.path_folder.exists():
+                print(f"Директория вуза {v.name} '{v.data_folder}' не найдена.")
+                if _dialogue_remove_vuz(v):
+                    vuzs.remove(v)
+
+        _save_vuzs_json(vuzs)
+
+        for folder in folders:
+            if folder.resolve() not in registered_folders:
+                vuzs = _dialogue_add_vuzs([folder], vuzs) or []
+
     return vuzs
 
 
@@ -80,6 +101,7 @@ def _read_data_indexes(vuzs: Iterable[Vuz]):
             is_index_created = _dialogue_add_index(folder)
             if not is_index_created:
                 print(f"Директория '{folder}' пропущена...")
+                continue
 
         list_dir = [
             {"normalized": normalize_program_name(pr_path), "path": pr_path}
@@ -123,12 +145,8 @@ def _scan_folders():
 
 
 def _get_accept(hint: str = "", *, default: bool | None = None):
-    hint = (
-        f"{hint} " + "(да/нет)"
-        if default is None
-        else "(ДА/нет)"
-        if default
-        else "(да/НЕТ)"
+    hint = f"{hint} " + (
+        "(да/нет)" if default is None else "(ДА/нет)" if default else "(да/НЕТ)"
     )
     while True:
         answer = input(hint + ": ").strip()
@@ -143,31 +161,35 @@ def _get_accept(hint: str = "", *, default: bool | None = None):
         print("Ввод не распознан, повторите...")
 
 
-def _dialogue_add_vuzs(folders: Iterable[Path]):
-    vuzs_json = []
+def _dialogue_add_vuzs(
+    folders: Iterable[Path], preserve: list[Vuz] | None = None
+) -> list[Vuz] | None:
+    vuzs: list[Vuz] = []
+
+    if preserve:
+        vuzs.extend(preserve)
 
     for folder in folders:
         print(
             f"Директория '{folder}' потенциально содержит файлы таблиц программ вуза."
         )
-        if not _get_accept("Хотите добавить вуз для этой папки?", default=True):
+        if not _get_accept("Хотите добавить эту директорию как вуз?", default=True):
             continue
 
         name = input(
             f"Введите название для вуза, которое будет привязано к директории {folder}: "
         )
 
-        vuzs_json.append({"name": name, "folder": str(folder.resolve())})
+        vuzs.append(Vuz(name, folder, []))
 
-    if len(vuzs_json) == 0:
-        return False
+    if len(vuzs) == 0:
+        return
 
-    with open(VUZS_PATH, "w") as f_vuzs:
-        json.dump(vuzs_json, f_vuzs, indent=2, ensure_ascii=False)
+    _save_vuzs_json(vuzs)
 
     print(f"Файл {VUZS_PATH} успешно создан.")
 
-    return True
+    return vuzs
 
 
 def _dialogue_add_index(folder: Path) -> bool:
@@ -199,3 +221,14 @@ def _dialogue_add_index(folder: Path) -> bool:
 
     print(f"Файл {folder / 'index.json'} успешно создан.")
     return True
+
+
+def _save_vuzs_json(vuzs: list[Vuz]) -> None:
+    vuzs_json = [v.to_indexable() for v in vuzs]
+
+    with open(VUZS_PATH, "w") as f_vuzs:
+        json.dump(vuzs_json, f_vuzs, indent=2, ensure_ascii=False)
+
+
+def _dialogue_remove_vuz(vuz: Vuz) -> bool:
+    return _get_accept(f"Хотите удалить {vuz.name} из индекса?", default=False)
