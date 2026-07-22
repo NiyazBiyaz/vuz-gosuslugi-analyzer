@@ -8,6 +8,8 @@
 # но оставляйте оригинальный файл лицензии и заголовок копирайта.
 
 
+import csv
+from datetime import datetime
 import sys
 
 from common import (
@@ -35,40 +37,17 @@ def main(vuz: Vuz, keep_ids: set[int]):
 def _read_tables(vuz: Vuz):
     students: dict[int, StudentInfo] = {}
 
+    gosuslugi_dialect = _GosuslugiDialect()
+
     for program in vuz.programs:
-        with open(program.full_path) as f_table:
+        with open(program.full_path, encoding="utf-8-sig") as f_table:
             f_table.readline()
+            lines = csv.reader(f_table, gosuslugi_dialect)
 
-            for line in f_table:
-                (order, prior, accept, total, exams, portfolio, status, id, date) = [
-                    ensure_no_quotes(value) for value in line.split(";")
-                ]
-                order = int(order)
-                prior = int(prior)
-                accept = accept != NON_ACCEPT
-                total = int(total)
-                exams = (
-                    [int(e) for e in exams.split()]
-                    if exams != WITHOUT_EXAMS
-                    else WITHOUT_EXAMS
+            for line in lines:
+                (_, prior, accept, total, exams, portfolio, status, id, date) = (
+                    _try_schemas(line)
                 )
-                if isinstance(exams, list):
-                    # У некоторых людей не все 3 экзамена прописаны,
-                    # поэтому добавляем им нули чтобы не падал скрипт
-                    exams += [0, 0, 0]
-                    exams = exams[0], exams[1], exams[2]
-
-                try:
-                    status = Status(status)
-                except ValueError:
-                    print(
-                        f"Неучтенный статус: '{status}'. Оставьте сообщение об этой ошибке: https://github.com/NiyazBiyaz/vuz-gosuslugi-analyzer/issues"
-                    )
-                    status = Status.STATUS_UNKNOWN
-
-                portfolio = int(portfolio)
-                id = int(id)
-                date = parse_date(date)
 
                 if id in students:
                     student = students[id]
@@ -147,6 +126,70 @@ def _sorted_by_priority(
     final_list += [(student, None) for student in cannot_list if student.accept]
 
     return final_list
+
+
+def _schema1(row: list[str]):
+    order, prior, accept, total, exams, portfolio, status, id, date = row
+    return order, prior, accept, total, exams, portfolio, status, id, date
+
+
+def _schema2(row: list[str]):
+    order, id, prior, accept, total, exams, portfolio, status, date = row
+    if exams == "—":
+        exams = ""
+    return order, prior, accept, total, exams, portfolio, status, id, date
+
+
+def _try_schemas(
+    row: list[str],
+) -> tuple[int, int, bool, int, tuple[int, int, int] | str, int, Status, int, datetime]:  # type: ignore  # It's never None
+    schemas = [_schema1, _schema2]
+    last_e = None
+    for schema in schemas:
+        try:
+            res = schema(row)
+            return _parse(*res)
+        except ValueError as e:
+            last_e = e
+
+    if last_e is not None:
+        raise last_e
+
+
+def _parse(order, prior, accept: str, total, exams, portfolio, status, id, date):
+    order = int(order)
+    prior = int(prior)
+    b_accept = accept != NON_ACCEPT
+    total = int(total)
+    exams = [int(e) for e in exams.split()] if exams != WITHOUT_EXAMS else WITHOUT_EXAMS
+    if isinstance(exams, list):
+        # У некоторых людей не все 3 экзамена прописаны,
+        # поэтому добавляем им нули чтобы не падал скрипт
+        exams += [0, 0, 0]
+        exams = exams[0], exams[1], exams[2]
+
+    try:
+        status = Status(status)
+    except ValueError:
+        print(
+            f"Неучтенный статус: '{status}'. Оставьте сообщение об этой ошибке: https://github.com/NiyazBiyaz/vuz-gosuslugi-analyzer/issues"
+        )
+        status = Status.STATUS_UNKNOWN
+
+    portfolio = int(portfolio)
+    id = int(id)
+    date = parse_date(date)
+    return order, prior, b_accept, total, exams, portfolio, status, id, date
+
+
+class _GosuslugiDialect(csv.Dialect):
+    def __init__(self):
+        self.delimiter = ";"
+        self.doublequote = False
+        self.lineterminator = "\n"
+        self.quoting = csv.QUOTE_ALL
+        self.quotechar = '"'
+        super().__init__()
 
 
 if __name__ == "__main__":
