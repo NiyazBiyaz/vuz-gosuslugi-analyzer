@@ -108,6 +108,11 @@ def _read_data_indexes(vuzs: Iterable[Vuz]):
             for pr_path in folder.iterdir()
             if pr_path.suffix == ".csv"
         ]
+        dir_names = [
+            normalize_program_name(pr_path)
+            for pr_path in folder.iterdir()
+            if pr_path.suffix == ".csv"
+        ]
 
         with open(folder / "index.json") as f_index:
             index = json.load(f_index)
@@ -116,11 +121,26 @@ def _read_data_indexes(vuzs: Iterable[Vuz]):
                     f"Неверный формат файла {(folder / 'index.json').resolve()}. Используйте объект JSON."
                 )
 
-        for pr_name, count in index.items():
-            if pr_name not in [pr["normalized"] for pr in list_dir]:
-                raise FileNotFoundError(
-                    f"Программа '{pr_name}' не найдена в файлах директории {folder}."
-                )
+        for found in dir_names:
+            if found not in index:
+                print(f"Найдена потенциальная программа вуза: '{found}'.")
+                if _get_accept("Хотите добавить программу в индекс директории?"):
+                    index[found] = _get_number(
+                        f"Введите количество свободных мест для программы '{found}': "
+                    )
+
+        for pr_name, count in index.copy().items():
+            if pr_name not in dir_names:
+                print(f"Программа '{pr_name}' не найдена в файлах директории {folder}.")
+                if _get_accept(
+                    f"Хотите удалить '{pr_name}' из индекса директории?", default=False
+                ):
+                    del index[pr_name]
+                else:
+                    print(f"Программа '{pr_name}' будет пропущена при обработке.")
+
+                continue
+
             if not isinstance(count, int):
                 raise TypeError(
                     f"Ожидалось целое число в значении напротив {pr_name} в файле {folder / 'index.json'}."
@@ -133,6 +153,10 @@ def _read_data_indexes(vuzs: Iterable[Vuz]):
 
             program = ProgramInfo(pr_name, pr_path, count, [])
             v.programs.append(program)
+
+        # Ранее могло быть изменение индекса.
+        with open(folder / "index.json", "w") as f_index:
+            json.dump(index, f_index, indent=2, ensure_ascii=False)
 
 
 def _scan_folders():
@@ -206,21 +230,27 @@ def _dialogue_add_index(folder: Path) -> bool:
     programs = {}
 
     for program in programs_found:
-        while True:
-            print(f"Введите количество свободных мест для программы '{program}':")
-            count = input()
-            if not count.isdigit():
-                print("Число не распознано. Повторите.")
-                continue
-
-            programs[program] = int(count)
-            break
+        programs[program] = _get_number(
+            f"Введите количество свободных мест для программы '{program}': "
+        )
+        break
 
     with open(folder / "index.json", "w") as f_index:
         json.dump(programs, f_index, indent=2, ensure_ascii=False)
 
     print(f"Файл {folder / 'index.json'} успешно создан.")
     return True
+
+
+def _get_number(hint: str):
+    while True:
+        print(hint)
+        value = input()
+        if not value.isdigit():
+            print("Число не распознано, повторите.")
+            continue
+
+        return int(value)
 
 
 def _save_vuzs_json(vuzs: list[Vuz]) -> None:
